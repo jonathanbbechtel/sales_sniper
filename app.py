@@ -393,7 +393,66 @@ with tab1:
             "TotalEnrollment": "Total Enrollment",
         }
         df_disp = df_view[show_cols].rename(columns=rename_map).reset_index(drop=True)
-        st.dataframe(df_disp, use_container_width=True, hide_index=True)
+        # Configure column tooltips and formatting for the Priority List table
+        column_config = {
+            "Statewide Rank": st.column_config.NumberColumn(
+                "Statewide Rank",
+                help="Rank among all TX districts by Priority Score (1 = highest priority).",
+                format="%d",
+            ),
+            "District": st.column_config.TextColumn(
+                "District",
+                help="District name."
+            ),
+            "County": st.column_config.TextColumn(
+                "County",
+                help="County name."
+            ),
+            "Region": st.column_config.TextColumn(
+                "Region",
+                help="ESC / local region."
+            ),
+            "Priority Grade": st.column_config.TextColumn(
+                "Priority Grade",
+                help="A–F label based on Priority Score percentile (A=top 10%, B=next 20%, C=middle 40%, D=next 20%, F=bottom 10%)."
+            ),
+            "Priority Score": st.column_config.NumberColumn(
+                "Priority Score",
+                help="0–1 score used to sort districts. Higher = higher priority. Combines high‑need school count, students affected, average school need, and economic disadvantage.",
+                format="%.3f",
+            ),
+            "High‑Need Schools": st.column_config.NumberColumn(
+                "High‑Need Schools",
+                help="Number of campuses with School Need ≥ the chosen threshold.",
+                format="%d",
+            ),
+            "Students in High‑Need Schools": st.column_config.NumberColumn(
+                "Students in High‑Need Schools",
+                help="Total students enrolled at high‑need campuses.",
+                format="%,d",
+            ),
+            "Average School Need": st.column_config.NumberColumn(
+                "Average School Need",
+                help="Enrollment‑weighted average of campus need across the district (approx. 0–4).",
+                format="%.2f",
+            ),
+            "Economic Disadvantage (weighted)": st.column_config.NumberColumn(
+                "Economic Disadvantage (weighted)",
+                help="Share of students who are economically disadvantaged, weighted by campus enrollment (0–1).",
+                format="%.2f",
+            ),
+            "Total Schools": st.column_config.NumberColumn(
+                "Total Schools",
+                help="Number of schools in the district present in the dataset.",
+                format="%d",
+            ),
+            "Total Enrollment": st.column_config.NumberColumn(
+                "Total Enrollment",
+                help="Total students across all schools in the district.",
+                format="%,d",
+            ),
+        }
+        st.dataframe(df_disp, use_container_width=True, hide_index=True, column_config=column_config)
 
         # Download
         csv_bytes = df_view[show_cols].to_csv(index=False).encode("utf-8")
@@ -470,7 +529,52 @@ with tab2:
                     "Percent Economically Disadvantaged": "Economically Disadvantaged (%)",
                     "HighNeedCampus": "High‑Need?"
                 }).reset_index(drop=True)
-                st.dataframe(c_disp, use_container_width=True, hide_index=True)
+                campus_column_config = {
+                    "School": st.column_config.TextColumn(
+                        "School",
+                        help="Campus name."
+                    ),
+                    "School Need Score": st.column_config.NumberColumn(
+                        "School Need Score",
+                        help="0–4 composite need score for the campus (higher = more need).",
+                        format="%.2f",
+                    ),
+                    "Impact (Need × Students)": st.column_config.NumberColumn(
+                        "Impact (Need × Students)",
+                        help="Campus impact magnitude: School Need × Enrollment.",
+                        format="%,.0f",
+                    ),
+                    "Enrollment": st.column_config.NumberColumn(
+                        "Enrollment",
+                        help="Total students enrolled at the campus.",
+                        format="%,d",
+                    ),
+                    "Achievement gap": st.column_config.NumberColumn(
+                        "Achievement gap",
+                        help="Deficit from A (4.0) in student achievement; higher = larger gap.",
+                        format="%.2f",
+                    ),
+                    "Growth gap": st.column_config.NumberColumn(
+                        "Growth gap",
+                        help="Deficit from A (4.0) in academic growth; higher = larger gap.",
+                        format="%.2f",
+                    ),
+                    "College readiness gap": st.column_config.NumberColumn(
+                        "College readiness gap",
+                        help="Deficit from A (4.0) in college readiness; higher = larger gap.",
+                        format="%.2f",
+                    ),
+                    "Economically Disadvantaged (%)": st.column_config.NumberColumn(
+                        "Economically Disadvantaged (%)",
+                        help="Percent of students who are economically disadvantaged.",
+                        format="%.0f%%",
+                    ),
+                    "High‑Need?": st.column_config.CheckboxColumn(
+                        "High‑Need?",
+                        help="True if School Need Score ≥ the chosen high‑need threshold."
+                    ),
+                }
+                st.dataframe(c_disp, use_container_width=True, hide_index=True, column_config=campus_column_config)
 
                 # Export selected district detail
                 st.download_button(
@@ -489,21 +593,57 @@ with tab2:
             peers_region = district_df[(district_df["Local Region"] == d_row.get("Local Region")) &
                                        (district_df["DISTRICT NAME"] != selected)] \
                                        .sort_values("PriorityIndex", ascending=False).head(10)
+
+            peers_column_config = {
+                "District": st.column_config.TextColumn(
+                    "District",
+                    help="District name."
+                ),
+                "Priority Grade": st.column_config.TextColumn(
+                    "Priority Grade",
+                    help="A–F label based on Priority Score percentile (A=top 10%, B=next 20%, C=middle 40%, D=next 20%, F=bottom 10%)."
+                ),
+                "Statewide Rank": st.column_config.NumberColumn(
+                    "Statewide Rank",
+                    help="Rank among all TX districts by Priority Score (1 = highest priority).",
+                    format="%d",
+                ),
+                "High‑Need Schools": st.column_config.NumberColumn(
+                    "High‑Need Schools",
+                    help="Number of campuses with School Need ≥ the chosen threshold.",
+                    format="%d",
+                ),
+                "Students in High‑Need Schools": st.column_config.NumberColumn(
+                    "Students in High‑Need Schools",
+                    help="Total students enrolled at high‑need campuses.",
+                    format="%,d",
+                ),
+            }
             if not peers_county.empty:
                 colA.write(f"In County: {d_row.get('County Name')}")
-                colA.dataframe(peers_county[["DISTRICT NAME", "InterventionPriorityGrade", "Rank",
-                                             "HighNeedSchoolCount", "ImpactedStudents"]]
-                               .reset_index(drop=True),
-                               use_container_width=True, hide_index=True)
+                df_pc_disp = peers_county[["DISTRICT NAME", "InterventionPriorityGrade", "Rank",
+                                             "HighNeedSchoolCount", "ImpactedStudents"]].rename(columns={
+                    "DISTRICT NAME": "District",
+                    "InterventionPriorityGrade": "Priority Grade",
+                    "Rank": "Statewide Rank",
+                    "HighNeedSchoolCount": "High‑Need Schools",
+                    "ImpactedStudents": "Students in High‑Need Schools"
+                }).reset_index(drop=True)
+                colA.dataframe(df_pc_disp, use_container_width=True, hide_index=True, column_config=peers_column_config)
             else:
                 colA.info("No county peers found (after filters).")
 
             if not peers_region.empty:
                 colB.write(f"In Local Region: {d_row.get('Local Region')}")
-                colB.dataframe(peers_region[["DISTRICT NAME", "InterventionPriorityGrade", "Rank",
-                                             "HighNeedSchoolCount", "ImpactedStudents"]]
-                               .reset_index(drop=True),
-                               use_container_width=True, hide_index=True)
+                df_pr_disp = peers_region[["DISTRICT NAME", "InterventionPriorityGrade", "Rank",
+                                             "HighNeedSchoolCount", "ImpactedStudents"]].rename(columns={
+                    "DISTRICT NAME": "District",
+                    "InterventionPriorityGrade": "Priority Grade",
+                    "Rank": "Statewide Rank",
+                    "HighNeedSchoolCount": "High‑Need Schools",
+                    "ImpactedStudents": "Students in High‑Need Schools"
+                }).reset_index(drop=True)
+                colB.dataframe(df_pr_disp, use_container_width=True, hide_index=True, column_config=peers_column_config)
             else:
                 colB.info("No region peers found (after filters).")
 
