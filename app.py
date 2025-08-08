@@ -287,32 +287,55 @@ def recommendation_text(d_row: pd.Series) -> list[str]:
 
 
 # Sidebar controls
-st.sidebar.header("Configuration")
-include_charters = st.sidebar.checkbox("Include Charter Schools", value=True)
+st.sidebar.header("Settings")
 
-st.sidebar.subheader("Campus Need Weights")
-w_ach = st.sidebar.slider("Achievement deficit weight", 0.0, 1.0, 0.40, 0.05)
-w_growth = st.sidebar.slider("Growth deficit weight", 0.0, 1.0, 0.35, 0.05)
-w_cr = st.sidebar.slider("College readiness deficit weight", 0.0, 1.0, 0.15, 0.05)
-w_econ = st.sidebar.slider("Economic disadvantage weight", 0.0, 1.0, 0.10, 0.05)
-campus_weights = (w_ach, w_growth, w_cr, w_econ)
+include_charters = st.sidebar.checkbox(
+    "Include charter schools?",
+    value=True,
+    help="When on, ranked results will include charter-operated schools."
+)
 
-threshold = st.sidebar.slider("High-Need Campus Threshold (0–4 scale)", 0.0, 4.0, 1.5, 0.1)
-min_enrollment = st.sidebar.number_input("Minimum campus enrollment to include", min_value=0, max_value=5000, value=50, step=10)
+threshold = st.sidebar.slider(
+    "What counts as a high‑need school? (0–4)",
+    0.0, 4.0, 1.5, 0.1,
+    help="Schools at or above this score are considered high‑need. 1.5 is a typical cut‑off."
+)
 
-st.sidebar.subheader("District Composite Weights")
-dw_count = st.sidebar.slider("Weight: Count of high-need schools", 0.0, 1.0, 0.45, 0.05)
-dw_students = st.sidebar.slider("Weight: Impacted students", 0.0, 1.0, 0.25, 0.05)
-dw_need = st.sidebar.slider("Weight: Avg need severity", 0.0, 1.0, 0.20, 0.05)
-dw_econ = st.sidebar.slider("Weight: Econ disadvantage", 0.0, 1.0, 0.10, 0.05)
-district_weights = (dw_count, dw_students, dw_need, dw_econ)
+min_enrollment = st.sidebar.number_input(
+    "Ignore very small schools (min students)",
+    min_value=0, max_value=5000, value=50, step=10,
+    help="Exclude very small schools that can distort rankings."
+)
 
 # Filters
 st.sidebar.subheader("Filters")
-county_filter = st.sidebar.text_input("Filter by County Name (contains)", value="")
-region_filter = st.sidebar.text_input("Filter by Local Region (contains)", value="")
+county_filter = st.sidebar.text_input("County contains", value="", help="Type part of a county name to narrow the list.")
+region_filter = st.sidebar.text_input("Region contains", value="", help="Type part of a region name to narrow the list.")
 grade_filter_opts = ["All", "A", "B", "C", "D", "F"]
-grade_filter = st.sidebar.selectbox("Filter by Intervention Grade", grade_filter_opts, index=0)
+grade_filter = st.sidebar.selectbox("Show only districts with grade", grade_filter_opts, index=0)
+
+with st.sidebar.expander("Advanced: Adjust scoring weights (optional)", expanded=False):
+    st.markdown("Campus scoring (how we define a high‑need school)")
+    w_ach = st.slider("Weight low test performance (achievement)", 0.0, 1.0, 0.40, 0.05,
+                      help="Higher = districts with more low scores rank higher.")
+    w_growth = st.slider("Weight slow academic growth", 0.0, 1.0, 0.35, 0.05,
+                         help="Higher = more emphasis on year‑over‑year growth gaps.")
+    w_cr = st.slider("Weight college readiness gaps", 0.0, 1.0, 0.15, 0.05,
+                     help="Higher = more emphasis on readiness indicators.")
+    w_econ = st.slider("Weight economic disadvantage", 0.0, 1.0, 0.10, 0.05,
+                       help="Higher = more emphasis where more students are economically disadvantaged.")
+    campus_weights = (w_ach, w_growth, w_cr, w_econ)
+
+    st.markdown("How we rank districts (combine the pieces)")
+    dw_count = st.slider("Count of high‑need schools", 0.0, 1.0, 0.45, 0.05,
+                         help="Higher = districts with more high‑need schools move up.")
+    dw_students = st.slider("Students in high‑need schools", 0.0, 1.0, 0.25, 0.05,
+                            help="Higher = more weight on how many students are affected.")
+    dw_need = st.slider("Average school need", 0.0, 1.0, 0.20, 0.05,
+                        help="Higher = more weight on the severity of need.")
+    dw_econ = st.slider("Economic disadvantage", 0.0, 1.0, 0.10, 0.05,
+                        help="Higher = more weight on economic disadvantage.")
+    district_weights = (dw_count, dw_students, dw_need, dw_econ)
 
 # Load and compute
 try:
@@ -338,10 +361,11 @@ if grade_filter != "All":
 st.title("Texas District High-Impact Tutoring (H.I.T.) Prioritization")
 
 # Tabs
-tab1, tab2, tab3, tab4 = st.tabs(["Rankings", "District Detail", "Map (Beta)", "Methodology"])
+tab1, tab2, tab3 = st.tabs(["Priority List", "District Profile", "FAQ"])
 
 with tab1:
-    st.subheader("District Rankings (Higher = Higher Intervention Priority)")
+    st.subheader("Priority List")
+    st.caption("Sorted by Priority Score (highest first).")
     if df_view.empty:
         st.info("No districts match current filters.")
     else:
@@ -353,23 +377,35 @@ with tab1:
             "EconWeighted", "TotalSchools", "TotalEnrollment"
         ]
         show_cols = [c for c in show_cols if c in df_view.columns]
-        st.dataframe(
-            df_view[show_cols].reset_index(drop=True),
-            use_container_width=True,
-            hide_index=True
-        )
+        # Friendly column names for display
+        rename_map = {
+            "Rank": "Statewide Rank",
+            "DISTRICT NAME": "District",
+            "County Name": "County",
+            "Local Region": "Region",
+            "InterventionPriorityGrade": "Priority Grade",
+            "PriorityIndex": "Priority Score",
+            "HighNeedSchoolCount": "High‑Need Schools",
+            "ImpactedStudents": "Students in High‑Need Schools",
+            "NeedAvgWeighted": "Average School Need",
+            "EconWeighted": "Economic Disadvantage (weighted)",
+            "TotalSchools": "Total Schools",
+            "TotalEnrollment": "Total Enrollment",
+        }
+        df_disp = df_view[show_cols].rename(columns=rename_map).reset_index(drop=True)
+        st.dataframe(df_disp, use_container_width=True, hide_index=True)
 
         # Download
         csv_bytes = df_view[show_cols].to_csv(index=False).encode("utf-8")
         st.download_button(
-            label="Download Rankings CSV",
+            label="Download list (CSV)",
             data=csv_bytes,
             file_name="district_rankings.csv",
             mime="text/csv"
         )
 
 with tab2:
-    st.subheader("District Detail")
+    st.subheader("District Profile")
     districts_sorted = district_df.sort_values("PriorityIndex", ascending=False)["DISTRICT NAME"].tolist()
     selected = st.selectbox("Select a district", options=districts_sorted)
 
@@ -380,24 +416,28 @@ with tab2:
 
             # KPIs
             kpi_cols = st.columns(4)
-            kpi_cols[0].metric("Intervention Grade", d_row.get("InterventionPriorityGrade", ""))
-            kpi_cols[1].metric("State Rank (Need)", int(d_row.get("Rank", np.nan)))
-            kpi_cols[2].metric("High-Need Schools", int(d_row.get("HighNeedSchoolCount", 0)))
-            kpi_cols[3].metric("Impacted Students", int(d_row.get("ImpactedStudents", 0)))
+            kpi_cols[0].metric("Priority Grade", d_row.get("InterventionPriorityGrade", ""))
+            kpi_cols[1].metric("Statewide Rank", int(d_row.get("Rank", np.nan)))
+            kpi_cols[2].metric("High‑Need Schools", int(d_row.get("HighNeedSchoolCount", 0)))
+            kpi_cols[3].metric("Students in High‑Need Schools", int(d_row.get("ImpactedStudents", 0)))
 
             # Breakdown chart (contributions)
             w = np.array(district_weights, dtype=float)
             if w.sum() > 0: w = w / w.sum()
             contribs = {
-                "High-Need School Count": float(d_row.get("S_HighNeedSchoolCount", 0) * w[0]),
-                "Impacted Students": float(d_row.get("S_ImpactedStudents", 0) * w[1]),
-                "Avg Need Severity": float(d_row.get("S_NeedAvgWeighted", 0) * w[2]),
-                "Econ Disadvantage": float(d_row.get("S_EconWeighted", 0) * w[3]),
+                "Number of high‑need schools": float(d_row.get("S_HighNeedSchoolCount", 0) * w[0]),
+                "Students affected": float(d_row.get("S_ImpactedStudents", 0) * w[1]),
+                "Average school need": float(d_row.get("S_NeedAvgWeighted", 0) * w[2]),
+                "Economic disadvantage": float(d_row.get("S_EconWeighted", 0) * w[3]),
             }
-            fig = px.bar(x=list(contribs.keys()), y=list(contribs.values()),
-                         labels={"x": "Component", "y": "Weighted Contribution"},
-                         title="Composite Index Contribution by Component")
+            fig = px.bar(
+                x=list(contribs.keys()),
+                y=list(contribs.values()),
+                labels={"x": "What matters", "y": "Relative contribution"},
+                title="What drives this district’s ranking"
+            )
             st.plotly_chart(fig, use_container_width=True)
+            st.caption("Higher bars mean this factor is contributing more to the district’s overall Priority Score.")
 
             # Drivers
             st.markdown("##### Key Drivers")
@@ -410,7 +450,7 @@ with tab2:
                 st.write(r)
 
             # Top contributing campuses
-            st.markdown("##### Top Contributing Campuses")
+            st.markdown("##### Top Contributing Schools")
             c = campus_df[campus_df["DISTRICT NAME"] == selected].copy()
             if not c.empty:
                 show_c_cols = [
@@ -419,11 +459,22 @@ with tab2:
                 ]
                 existing_cols = [x for x in show_c_cols if x in c.columns]
                 c = c.sort_values("CampusImpact", ascending=False)
-                st.dataframe(c[existing_cols].reset_index(drop=True), use_container_width=True, hide_index=True)
+                c_disp = c[existing_cols].rename(columns={
+                    "CAMPUS NAME": "School",
+                    "CampusNeed": "School Need Score",
+                    "CampusImpact": "Impact (Need × Students)",
+                    "TOTAL ENROLLMENT": "Enrollment",
+                    "AchDef": "Achievement gap",
+                    "GrowthDef": "Growth gap",
+                    "CRDef": "College readiness gap",
+                    "Percent Economically Disadvantaged": "Economically Disadvantaged (%)",
+                    "HighNeedCampus": "High‑Need?"
+                }).reset_index(drop=True)
+                st.dataframe(c_disp, use_container_width=True, hide_index=True)
 
                 # Export selected district detail
                 st.download_button(
-                    label="Download Selected District Campus Detail CSV",
+                    label="Download campus details (CSV)",
                     data=c[existing_cols].to_csv(index=False).encode("utf-8"),
                     file_name=f"{selected.replace(' ', '_').lower()}_campus_detail.csv",
                     mime="text/csv"
@@ -456,46 +507,72 @@ with tab2:
             else:
                 colB.info("No region peers found (after filters).")
 
+
 with tab3:
-    st.subheader("Map (Beta)")
-    st.info("This dataset does not include district geocoordinates or boundaries. "
-            "The map below embeds the TEA ESC map for geographic context. "
-            "Enhanced district-level mapping (with polygons/points) can be added if we incorporate external geospatial data.")
-    try:
-        st.components.v1.iframe(
-            "https://tea.texas.gov/about-tea/other-services/education-service-centers/education-service-centers-map",
-            height=550
-        )
-    except Exception:
-        st.warning("Unable to embed TEA map. Please open the provided link in a browser.")
+    st.subheader("FAQ")
 
-with tab4:
-    st.subheader("Methodology")
-    st.markdown("""
-- Campus letter grades are mapped to numeric on a 4.3 scale (A+=4.3, A=4.0, A-=3.7, ..., F=0).
-- Deficits are computed as max(0, 4.0 - score) for Achievement, Growth, and College Readiness.
-- Percent Economically Disadvantaged is normalized to 0–1 and scaled to 0–4 for comparability.
-- CampusNeed = weighted sum of [Achievement deficit, Growth deficit, College Readiness deficit, Econ-scaled].
-- CampusImpact = CampusNeed × Enrollment.
-- High-Need campuses are flagged when CampusNeed ≥ threshold (default 1.5 of 0–4 scale).
-- District aggregation:
-  - HighNeedSchoolCount = number of flagged campuses
-  - ImpactedStudents = total enrollment across flagged campuses
-  - NeedAvgWeighted = sum(CampusImpact) / sum(Enrollment)
-  - EconWeighted = enrollment-weighted Econ (0–1)
-- Each district component is min-max scaled across districts; composite index is a weighted sum of scaled components.
-- Intervention Priority Grade bands (by PriorityIndex percentiles): A (top 10%), B (next 20%), C (middle 40%), D (next 20%), F (bottom 10%).
-- All weights and the campus threshold are adjustable in the sidebar for transparency and what-if analysis.
-    """)
+    with st.expander("What does this app do?", expanded=True):
+        st.markdown("It helps you quickly find Texas school districts where high‑impact tutoring can help the most. Districts are ranked from highest to lowest priority based on the number of high‑need schools, how many students are affected, how severe the needs are, and the level of economic disadvantage.")
 
-    st.markdown("Data caveats:")
-    st.markdown("""
-- CSV includes campus-level rows; charter indicator is included and can be toggled.
-- Geographic mapping is approximate in the MVP due to missing geolocation/boundaries.
-- 'Local Region' in the CSV is used as a proxy grouping; ESC alignment can be added later.
-    """)
+    with st.expander("How do I use it?"):
+        st.markdown("""
+- Start on the Priority List tab. The top rows show where tutoring could have the biggest impact.
+- Use the filters on the left to narrow by county, region, or grade.
+- Open a District Profile to see key drivers and recommended actions.
+- Optional: Open “Advanced: Adjust scoring weights” to change how the score is calculated.
+        """)
 
-    if st.checkbox("Show sample of raw loaded columns"):
-        st.write(df_raw.head(10))
+    with st.expander("What is a “high‑need” school?"):
+        st.markdown("A school that scores above your chosen cut‑off (default 1.5 on a 0–4 scale) based on a mix of lower performance, slower growth, college readiness gaps, and economic disadvantage.")
 
-    st.caption("Built for prioritizing outreach where high-impact tutoring can make the largest difference. Adjust weights and threshold in the sidebar to explore scenarios.")
+    with st.expander("What do “Priority Score” and “Priority Grade” mean?"):
+        st.markdown("""
+- Priority Score: A 0–1 score used to sort districts. Higher = higher priority.
+- Priority Grade: A simple A–F label based on percentiles of the Priority Score:
+  - A = highest priority (top 10%)
+  - B = next 20%
+  - C = middle 40%
+  - D = next 20%
+  - F = lowest priority (bottom 10%)
+        """)
+
+    with st.expander("What affects the Priority Score?"):
+        st.markdown("""
+Four ingredients:
+1) Number of high‑need schools
+2) Students in high‑need schools
+3) Average school need (how severe the needs are)
+4) Economic disadvantage
+You can change their importance in Advanced settings.
+        """)
+
+    with st.expander("Where do the data and grades come from?"):
+        st.markdown("Campus letter grades (A–F) are converted to numbers. We look at achievement, growth, and college‑readiness, plus the percent of students who are economically disadvantaged. We never show student‑level data—only school/district totals.")
+
+    with st.expander("Why does the ranking change when I move sliders?"):
+        st.markdown("Because you’re telling the app which factors matter more. For example, if you increase “Students in high‑need schools,” districts with more affected students will move up.")
+
+    with st.expander("What settings should I start with?"):
+        st.markdown("""
+- Leave Advanced settings as‑is for a balanced view.
+- If you want a shorter list, raise “What counts as a high‑need school?”.
+- If very small schools appear, raise “Ignore very small schools.”
+        """)
+
+    with st.expander("Can I download the results?"):
+        st.markdown("Yes. Use the “Download list (CSV)” button on the Priority List. In a District Profile, you can also download campus‑level details.")
+
+    with st.expander("Definitions (quick reference)"):
+        st.markdown("""
+- Priority Score: A 0–1 score used to sort districts. Higher = higher priority.
+- Priority Grade: A simple A–F label based on the Priority Score.
+- High‑need school: A school above the chosen cut‑off on the 0–4 need scale.
+- Average school need: Average severity of need across a district’s schools.
+- Students in high‑need schools: Total students enrolled in high‑need schools.
+        """)
+
+    with st.expander("Advanced / Data"):
+        if st.checkbox("Show sample of raw loaded columns"):
+            st.write(df_raw.head(10))
+
+    st.caption("Built to prioritize outreach where high‑impact tutoring can make the largest difference. Adjust settings in the sidebar to explore scenarios.")
